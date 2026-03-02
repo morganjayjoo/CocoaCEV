@@ -882,3 +882,71 @@ def cmd_dashboard(w3, contract, args) -> None:
     try:
         hashes, bands, vols, prices = contract.functions.getHeatSummary().call()
         cold, mild, warm, hot, critical = contract.functions.getBandStats().call()
+        seq = contract.functions.getGlobalReportSequence().call()
+        paused = contract.functions.platformPaused().call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    symbol_map = get_config("symbol_map") or {}
+    width = 70
+    print("\n  +" + "-" * (width - 2) + "+")
+    print("  | Therminos dashboard" + " " * (width - 24) + "|")
+    print("  | sequence=%s  paused=%s" % (seq, paused) + " " * (width - 35) + "|")
+    print("  +" + "-" * (width - 2) + "+")
+    print("  | Band distribution: cold=%s mild=%s warm=%s hot=%s critical=%s" % (cold, mild, warm, hot, critical) + " " * max(0, width - 65) + "|")
+    print("  +" + "-" * (width - 2) + "+")
+    for i, h in enumerate(hashes):
+        hex_h = hash_to_hex(h) if hasattr(h, "hex") else str(h)
+        label = symbol_map.get(hex_h, hex_h[:14] + "..")
+        band = bands[i] if i < len(bands) else 0
+        vol = vols[i] if i < len(vols) else 0
+        pr = prices[i] if i < len(prices) else 0
+        bar = band_bar(band, 12)
+        line = "  | %s  %s  %s  %s  %s" % (label[:18].ljust(18), band_name(band).ljust(10), fmt_volatility_bps(vol).ljust(10), fmt_price_e8(pr).ljust(12), bar)
+        print(line[: width + 4] + " " * max(0, width - len(line) + 4) + "|")
+    print("  +" + "-" * (width - 2) + "+\n")
+
+
+# -----------------------------------------------------------------------------
+# Commands: export-csv
+# -----------------------------------------------------------------------------
+def cmd_export_csv(w3, contract, args) -> None:
+    out_path = args.output or "cocoa_cev_export.csv"
+    try:
+        hashes = contract.functions.getRegisteredSymbols().call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    symbol_map = get_config("symbol_map") or {}
+    rows = [["symbol_hash_hex", "label", "current_band", "band_name", "current_price_e8", "current_volatility_e8", "halted", "last_report_block"]]
+    for h in hashes:
+        hex_h = hash_to_hex(h) if hasattr(h, "hex") else str(h)
+        try:
+            summary = contract.functions.getSummaryForSymbol(h).call()
+        except Exception:
+            continue
+        (cur_price, cur_vol, cur_band, min_p, max_p, hist_len, halted, last_block) = summary
+        rows.append([hex_h, symbol_map.get(hex_h, hex_h), str(cur_band), band_name(cur_band), str(cur_price), str(cur_vol), str(halted), str(last_block)])
+    import csv
+    with open(out_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.writer(f)
+        writer.writerows(rows)
+    print(f"Exported CSV to {out_path}")
+
+
+# -----------------------------------------------------------------------------
+# Commands: alerts
+# -----------------------------------------------------------------------------
+def cmd_alerts(w3, contract, args) -> None:
+    try:
+        hashes = contract.functions.getRegisteredSymbols().call()
+        paused = contract.functions.platformPaused().call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    symbol_map = get_config("symbol_map") or {}
+    hot_or_critical = []
+    halted_list = []
+    for h in hashes:
+        try:
+            band = contract.functions.getCurrentBand(h).call()
