@@ -678,3 +678,71 @@ def cmd_set_config(args) -> None:
     elif key == "rpc_url":
         set_config(key, value)
         print(f"Set rpc_url = {value}")
+    elif key == "symbol_map":
+        try:
+            mapping = json.loads(value)
+            set_config(key, mapping)
+            print(f"Set symbol_map = {mapping}")
+        except json.JSONDecodeError:
+            print("symbol_map must be JSON object, e.g. {\"0xabc...\": \"BTC\"}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        set_config(key, value)
+        print(f"Set {key} = {value}")
+
+
+# -----------------------------------------------------------------------------
+# Commands: add-symbol-label
+# -----------------------------------------------------------------------------
+def cmd_add_symbol_label(args) -> None:
+    hash_hex = args.hash
+    label = args.label
+    if not hash_hex or not label:
+        print("Provide --hash (bytes32 hex) and --label", file=sys.stderr)
+        sys.exit(1)
+    c = load_config()
+    m = c.get("symbol_map") or {}
+    m[hash_hex] = label
+    c["symbol_map"] = m
+    save_config(c)
+    print(f"Mapped {hash_hex} -> {label}")
+
+
+# -----------------------------------------------------------------------------
+# Helpers: validation and conversion
+# -----------------------------------------------------------------------------
+def price_float_to_e8(price: float) -> int:
+    """Convert human price to E8 integer."""
+    return int(round(price * E8))
+
+
+def price_e8_to_float(price_e8: int) -> float:
+    """Convert E8 integer to float."""
+    return price_e8 / E8
+
+
+def validate_address(addr: Optional[str]) -> bool:
+    if not addr:
+        return False
+    try:
+        from web3 import Web3
+        return Web3.is_address(addr)
+    except Exception:
+        return len(addr) == 42 and addr.startswith("0x")
+
+
+def validate_bytes32_hex(s: str) -> bool:
+    return isinstance(s, str) and len(s) == 66 and s.startswith("0x") and all(c in "0123456789abcdefABCDEF" for c in s[2:])
+
+
+# -----------------------------------------------------------------------------
+# ASCII thermometer bar
+# -----------------------------------------------------------------------------
+def band_bar(band: int, width: int = 20) -> str:
+    """Return a simple ASCII bar for band level (0-4)."""
+    if width < 5:
+        width = 5
+    fill = int((band + 1) / 5 * width)
+    fill = min(fill, width)
+    return "[" + "#" * fill + "." * (width - fill) + "]"
+
