@@ -338,3 +338,71 @@ def cmd_symbol(w3, contract, args) -> None:
 # -----------------------------------------------------------------------------
 def cmd_list(w3, contract, args) -> None:
     try:
+        hashes = contract.functions.getRegisteredSymbols().call()
+        count = contract.functions.getSlotsCount().call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(f"\n  Registered symbols ({count})\n")
+    symbol_map = get_config("symbol_map") or {}
+    for h in hashes:
+        hex_h = hash_to_hex(h) if hasattr(h, "hex") else str(h)
+        label = symbol_map.get(hex_h, hex_h[:20] + "..")
+        print(f"    {label}")
+    print()
+
+
+# -----------------------------------------------------------------------------
+# Commands: thresholds
+# -----------------------------------------------------------------------------
+def cmd_thresholds(w3, contract, args) -> None:
+    try:
+        cold, mild, warm, hot = contract.functions.getThresholds().call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    print("\n  Volatility band thresholds (bps)")
+    print("  " + "-" * 40)
+    print(f"  cold:     0 - {cold}")
+    print(f"  mild:     {cold} - {mild}")
+    print(f"  warm:     {mild} - {warm}")
+    print(f"  hot:      {warm} - {hot}")
+    print(f"  critical: {hot} - 10000")
+    print("  " + "-" * 40)
+
+
+# -----------------------------------------------------------------------------
+# Commands: config (contract)
+# -----------------------------------------------------------------------------
+def cmd_config_snapshot(w3, contract, args) -> None:
+    try:
+        out = contract.functions.getConfigSnapshot().call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    (owner_addr, treasury_addr, guardian_addr, updater_addr, deploy_blk, cold_bps, mild_bps, warm_bps, hot_bps, report_fee, max_hist_len, paused) = out
+    print("\n  Contract config")
+    print("  " + "-" * 50)
+    print(f"  Owner:         {owner_addr}")
+    print(f"  Treasury:      {treasury_addr}")
+    print(f"  Guardian:      {guardian_addr}")
+    print(f"  Updater:       {updater_addr}")
+    print(f"  Deploy block:  {deploy_blk}")
+    print(f"  Cold bps:      {cold_bps}")
+    print(f"  Mild bps:      {mild_bps}")
+    print(f"  Warm bps:     {warm_bps}")
+    print(f"  Hot bps:      {hot_bps}")
+    print(f"  Report fee:    {report_fee} wei ({fmt_eth(report_fee)})")
+    print(f"  Max history:   {max_hist_len}")
+    print(f"  Paused:       {paused}")
+    print("  " + "-" * 50)
+
+
+# -----------------------------------------------------------------------------
+# Commands: report
+# -----------------------------------------------------------------------------
+def cmd_report(w3, contract, args) -> None:
+    sym = args.symbol
+    price = args.price
+    if not sym or price is None:
+        print("Provide --symbol and --price (price in E8 units, e.g. 45000_00000000 for 45000)", file=sys.stderr)
