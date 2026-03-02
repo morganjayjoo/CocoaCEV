@@ -406,3 +406,71 @@ def cmd_report(w3, contract, args) -> None:
     price = args.price
     if not sym or price is None:
         print("Provide --symbol and --price (price in E8 units, e.g. 45000_00000000 for 45000)", file=sys.stderr)
+        sys.exit(1)
+    try:
+        price_e8 = int(price)
+    except ValueError:
+        print("--price must be an integer (E8)", file=sys.stderr)
+        sys.exit(1)
+    pk = get_private_key()
+    if not pk:
+        print("Private key required for report. Set COCOACEV_PRIVATE_KEY or private_key in config.", file=sys.stderr)
+        sys.exit(1)
+    try:
+        from web3 import Web3
+        account = w3.eth.account.from_key(pk)
+    except Exception as e:
+        print(f"Invalid key or web3: {e}", file=sys.stderr)
+        sys.exit(1)
+    fee = contract.functions.getReportFeeWei().call()
+    tx_params = {"from": account.address, "gas": 200_000}
+    if fee > 0:
+        tx_params["value"] = fee
+    try:
+        h = contract.functions.symbolHashFromString(sym).call()
+        can = contract.functions.canReport(h).call()
+        if not can:
+            print("Cannot report: cooldown or symbol halted.", file=sys.stderr)
+            sys.exit(1)
+        tx = contract.functions.reportPrice(h, price_e8).build_transaction(tx_params)
+        tx["nonce"] = w3.eth.get_transaction_count(account.address)
+        signed = w3.eth.account.sign_transaction(tx, account.key)
+        tx_hash = w3.eth.send_raw_transaction(signed.raw_transaction)
+        print(f"Tx sent: {tx_hash.hex()}")
+        if args.wait:
+            receipt = w3.eth.wait_for_transaction_receipt(tx_hash)
+            print(f"Block: {receipt['blockNumber']}, status: {receipt['status']}")
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+# -----------------------------------------------------------------------------
+# Commands: batch-report
+# -----------------------------------------------------------------------------
+def cmd_batch_report(w3, contract, args) -> None:
+    symbols = args.symbols
+    prices = args.prices
+    if not symbols or not prices:
+        print("Provide --symbols and --prices (comma-separated; counts must match)", file=sys.stderr)
+        sys.exit(1)
+    sym_list = [s.strip() for s in symbols.split(",")]
+    try:
+        price_list = [int(p.strip()) for p in prices.split(",")]
+    except ValueError:
+        print("--prices must be comma-separated integers (E8)", file=sys.stderr)
+        sys.exit(1)
+    if len(sym_list) != len(price_list):
+        print("Symbol and price counts must match.", file=sys.stderr)
+        sys.exit(1)
+    pk = get_private_key()
+    if not pk:
+        print("Private key required.", file=sys.stderr)
+        sys.exit(1)
+    try:
+        from web3 import Web3
+        account = w3.eth.account.from_key(pk)
+    except Exception as e:
+        print(f"Invalid key: {e}", file=sys.stderr)
+        sys.exit(1)
+    hashes = []
