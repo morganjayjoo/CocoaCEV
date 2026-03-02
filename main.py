@@ -746,3 +746,71 @@ def band_bar(band: int, width: int = 20) -> str:
     fill = min(fill, width)
     return "[" + "#" * fill + "." * (width - fill) + "]"
 
+
+def band_color_name(band: int) -> str:
+    """Label suitable for terminal color."""
+    names = ("cold", "mild", "warm", "hot", "critical")
+    return names[band] if 0 <= band < 5 else "unknown"
+
+
+# -----------------------------------------------------------------------------
+# Table formatting
+# -----------------------------------------------------------------------------
+def table_row(columns: list[str], widths: Optional[list[int]] = None) -> str:
+    if not widths:
+        widths = [max(8, len(c) + 2) for c in columns]
+    parts = []
+    for i, c in enumerate(columns):
+        w = widths[i] if i < len(widths) else len(c) + 2
+        parts.append(str(c)[: w - 2].ljust(w - 2)[: w - 2])
+    return "  ".join(parts)
+
+
+def table_sep(widths: list[int], char: str = "-") -> str:
+    return "  ".join(char * w for w in widths)
+
+
+# -----------------------------------------------------------------------------
+# Commands: status
+# -----------------------------------------------------------------------------
+def cmd_status(w3, contract, args) -> None:
+    try:
+        balance = contract.functions.getContractBalance().call()
+        paused = contract.functions.platformPaused().call()
+        seq = contract.functions.getGlobalReportSequence().call()
+        count = contract.functions.getSlotsCount().call()
+        fee = contract.functions.getReportFeeWei().call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    print("\n  Contract status")
+    print("  " + "-" * 40)
+    print(f"  Contract balance:  {fmt_eth(balance)}")
+    print(f"  Paused:            {paused}")
+    print(f"  Global report seq: {seq}")
+    print(f"  Thermometer count: {count}")
+    print(f"  Report fee:        {fee} wei ({fmt_eth(fee)})")
+    print("  " + "-" * 40)
+
+
+# -----------------------------------------------------------------------------
+# Commands: can-report
+# -----------------------------------------------------------------------------
+def cmd_can_report(w3, contract, args) -> None:
+    sym = args.symbol
+    if not sym:
+        print("Provide --symbol", file=sys.stderr)
+        sys.exit(1)
+    try:
+        h = contract.functions.symbolHashFromString(sym).call()
+        can = contract.functions.canReport(h).call()
+        halted = contract.functions.isHalted(h).call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(f"\n  Symbol: {sym}")
+    print(f"  Can report: {can}")
+    print(f"  Halted:     {halted}\n")
+
+
+# -----------------------------------------------------------------------------
