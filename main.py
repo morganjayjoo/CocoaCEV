@@ -202,3 +202,71 @@ def connect_web3():
         sys.exit(1)
     rpc = get_rpc()
     w3 = Web3(Web3.HTTPProvider(rpc))
+    if not w3.is_connected():
+        raise ConnectionError(f"Cannot connect to RPC: {rpc}")
+    return w3
+
+
+def get_contract(w3):
+    addr = get_contract_address()
+    if not addr:
+        raise ValueError("Contract address not set. Use --contract or set contract_address in config.")
+    return w3.eth.contract(address=Web3.to_checksum_address(addr), abi=THRMINOS_ABI)
+
+
+def symbol_to_hash(w3, symbol: str) -> bytes:
+    contract = w3.eth.contract(address=Web3.to_checksum_address(get_contract_address()), abi=THRMINOS_ABI)
+    return contract.functions.symbolHashFromString(symbol).call()
+
+
+# -----------------------------------------------------------------------------
+# Formatting
+# -----------------------------------------------------------------------------
+def fmt_price_e8(price_e8: int) -> str:
+    if price_e8 == 0:
+        return "0"
+    return f"{price_e8 / E8:.8f}"
+
+
+def fmt_volatility_bps(vol_e8: int) -> str:
+    if vol_e8 == 0:
+        return "0"
+    bps = (vol_e8 * BPS_BASE) // E8
+    return f"{bps} bps"
+
+
+def fmt_eth(wei: int | str) -> str:
+    try:
+        w = int(wei)
+        return f"{w / 1e18:.6f} ETH"
+    except (ValueError, TypeError):
+        return str(wei)
+
+
+def truncate_addr(addr: str, head: int = 6, tail: int = 4) -> str:
+    if not addr or len(addr) < head + tail + 2:
+        return addr or ""
+    return f"{addr[: head + 2]}...{addr[-tail:]}"
+
+
+def band_name(band: int) -> str:
+    if 0 <= band < len(BAND_NAMES):
+        return BAND_NAMES[band]
+    return f"band_{band}"
+
+
+def hash_to_hex(h: bytes) -> str:
+    if hasattr(h, "hex"):
+        return "0x" + h.hex()
+    return str(h)
+
+
+# -----------------------------------------------------------------------------
+# Commands: summary
+# -----------------------------------------------------------------------------
+def cmd_summary(w3, contract, args) -> None:
+    try:
+        hashes, bands, vols, prices = contract.functions.getHeatSummary().call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
