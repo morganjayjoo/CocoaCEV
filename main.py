@@ -542,3 +542,71 @@ def cmd_band_history(w3, contract, args) -> None:
     for i in range(len(bands) - 1, -1, -1):
         print(f"    block {blocks[i]:8}  band={band_name(bands[i])}")
     print()
+
+
+# -----------------------------------------------------------------------------
+# Commands: hottest / coldest
+# -----------------------------------------------------------------------------
+def cmd_hottest(w3, contract, args) -> None:
+    try:
+        h, band, vol = contract.functions.getHottestSymbol().call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    hex_h = hash_to_hex(h) if hasattr(h, "hex") else str(h)
+    symbol_map = get_config("symbol_map") or {}
+    label = symbol_map.get(hex_h, hex_h[:20] + "..")
+    print(f"\n  Hottest: {label}  band={band_name(band)}  volatility_e8={vol} ({fmt_volatility_bps(vol)})\n")
+
+
+def cmd_coldest(w3, contract, args) -> None:
+    try:
+        h, band, vol = contract.functions.getColdestSymbol().call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    hex_h = hash_to_hex(h) if hasattr(h, "hex") else str(h)
+    symbol_map = get_config("symbol_map") or {}
+    label = symbol_map.get(hex_h, hex_h[:20] + "..")
+    print(f"\n  Coldest: {label}  band={band_name(band)}  volatility_e8={vol} ({fmt_volatility_bps(vol)})\n")
+
+
+# -----------------------------------------------------------------------------
+# Commands: watch
+# -----------------------------------------------------------------------------
+def cmd_watch(w3, contract, args) -> None:
+    interval = args.interval or 12
+    print(f"Refreshing every {interval}s (Ctrl+C to stop)\n")
+    try:
+        while True:
+            try:
+                hashes, bands, vols, prices = contract.functions.getHeatSummary().call()
+                seq = contract.functions.getGlobalReportSequence().call()
+                paused = contract.functions.platformPaused().call()
+            except Exception as e:
+                print(f"Error: {e}", file=sys.stderr)
+                time.sleep(interval)
+                continue
+            print("\033[2J\033[H", end="")
+            print(f"  Therminos heat (sequence={seq}, paused={paused})  refresh={interval}s\n")
+            symbol_map = get_config("symbol_map") or {}
+            for i, h in enumerate(hashes):
+                hex_h = hash_to_hex(h) if hasattr(h, "hex") else str(h)
+                label = symbol_map.get(hex_h, hex_h[:16] + "..")
+                band = bands[i] if i < len(bands) else 0
+                vol = vols[i] if i < len(vols) else 0
+                pr = prices[i] if i < len(prices) else 0
+                print(f"  {label:22}  {band_name(band):10}  {fmt_volatility_bps(vol):12}  {fmt_price_e8(pr)}")
+            print("\n  Ctrl+C to stop.")
+            time.sleep(interval)
+    except KeyboardInterrupt:
+        print("\nStopped.")
+
+
+# -----------------------------------------------------------------------------
+# Commands: export
+# -----------------------------------------------------------------------------
+def cmd_export(w3, contract, args) -> None:
+    out_path = args.output or "cocoa_cev_export.json"
+    try:
+        hashes = contract.functions.getRegisteredSymbols().call()
