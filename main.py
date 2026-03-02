@@ -610,3 +610,71 @@ def cmd_export(w3, contract, args) -> None:
     out_path = args.output or "cocoa_cev_export.json"
     try:
         hashes = contract.functions.getRegisteredSymbols().call()
+        cold, mild, warm, hot, critical = contract.functions.getBandStats().call()
+        seq = contract.functions.getGlobalReportSequence().call()
+        config = contract.functions.getConfigSnapshot().call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    data = {
+        "exported_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "contract": get_contract_address(),
+        "global_report_sequence": seq,
+        "band_stats": {"cold": cold, "mild": mild, "warm": warm, "hot": hot, "critical": critical},
+        "config": {
+            "owner": config[0],
+            "treasury": config[1],
+            "guardian": config[2],
+            "updater": config[3],
+            "deploy_block": config[4],
+            "cold_bps": config[5],
+            "mild_bps": config[6],
+            "warm_bps": config[7],
+            "hot_bps": config[8],
+            "report_fee_wei": config[9],
+            "max_history_len": config[10],
+            "paused": config[11],
+        },
+        "thermometers": [],
+    }
+    symbol_map = get_config("symbol_map") or {}
+    for h in hashes:
+        hex_h = hash_to_hex(h) if hasattr(h, "hex") else str(h)
+        try:
+            summary = contract.functions.getSummaryForSymbol(h).call()
+        except Exception:
+            continue
+        (cur_price, cur_vol, cur_band, min_p, max_p, hist_len, halted, last_block) = summary
+        data["thermometers"].append({
+            "symbol_hash_hex": hex_h,
+            "label": symbol_map.get(hex_h, hex_h),
+            "current_price_e8": cur_price,
+            "current_volatility_e8": cur_vol,
+            "current_band": cur_band,
+            "band_name": band_name(cur_band),
+            "min_price_e8": min_p,
+            "max_price_e8": max_p,
+            "history_length": hist_len,
+            "halted": halted,
+            "last_report_block": last_block,
+        })
+    with open(out_path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    print(f"Exported to {out_path}")
+
+
+# -----------------------------------------------------------------------------
+# Commands: set-config (local config)
+# -----------------------------------------------------------------------------
+def cmd_set_config(args) -> None:
+    key = args.key
+    value = args.value
+    if not key:
+        print("Provide --key and --value", file=sys.stderr)
+        sys.exit(1)
+    if key == "contract_address":
+        set_config(key, value)
+        print(f"Set contract_address = {value}")
+    elif key == "rpc_url":
+        set_config(key, value)
+        print(f"Set rpc_url = {value}")
