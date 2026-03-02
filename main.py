@@ -814,3 +814,71 @@ def cmd_can_report(w3, contract, args) -> None:
 
 
 # -----------------------------------------------------------------------------
+# Commands: thermometer (full slot)
+# -----------------------------------------------------------------------------
+def cmd_thermometer(w3, contract, args) -> None:
+    sym = args.symbol
+    if not sym:
+        print("Provide --symbol", file=sys.stderr)
+        sys.exit(1)
+    try:
+        h = contract.functions.symbolHashFromString(sym).call()
+        out = contract.functions.getThermometer(h).call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    (window_blocks, cooldown_blocks, last_report_block, current_band, current_volatility_e8,
+     current_price_e8, halted, registered_at_block, history_length) = out
+    print(f"\n  Thermometer: {sym}")
+    print("  " + "-" * 50)
+    print(f"  Window blocks:      {window_blocks}")
+    print(f"  Cooldown blocks:     {cooldown_blocks}")
+    print(f"  Last report block:   {last_report_block}")
+    print(f"  Current band:        {current_band} ({band_name(current_band)}) {band_bar(current_band)}")
+    print(f"  Current volatility: {current_volatility_e8} ({fmt_volatility_bps(current_volatility_e8)})")
+    print(f"  Current price E8:   {current_price_e8} ({fmt_price_e8(current_price_e8)})")
+    print(f"  Halted:              {halted}")
+    print(f"  Registered at block: {registered_at_block}")
+    print(f"  History length:     {history_length}")
+    print("  " + "-" * 50)
+
+
+# -----------------------------------------------------------------------------
+# Commands: slots (paginated)
+# -----------------------------------------------------------------------------
+def cmd_slots(w3, contract, args) -> None:
+    offset = args.offset or 0
+    limit = args.limit or 20
+    try:
+        total = contract.functions.getSlotsCount().call()
+        hashes = contract.functions.getRegisteredSymbols().call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    if offset >= len(hashes):
+        print("No slots in range.")
+        return
+    end = min(offset + limit, len(hashes))
+    subset = hashes[offset:end]
+    symbol_map = get_config("symbol_map") or {}
+    print(f"\n  Slots {offset + 1}-{end} of {total}\n")
+    for h in subset:
+        hex_h = hash_to_hex(h) if hasattr(h, "hex") else str(h)
+        label = symbol_map.get(hex_h, hex_h[:18] + "..")
+        try:
+            band = contract.functions.getCurrentBand(h).call()
+            vol = contract.functions.getVolatilityE8(h).call()
+            pr = contract.functions.getCurrentPriceE8(h).call()
+        except Exception:
+            band, vol, pr = 0, 0, 0
+        print(f"    {label:24}  band={band_name(band):10}  vol={fmt_volatility_bps(vol):12}  price={fmt_price_e8(pr)}")
+    print()
+
+
+# -----------------------------------------------------------------------------
+# Commands: dashboard (box summary)
+# -----------------------------------------------------------------------------
+def cmd_dashboard(w3, contract, args) -> None:
+    try:
+        hashes, bands, vols, prices = contract.functions.getHeatSummary().call()
+        cold, mild, warm, hot, critical = contract.functions.getBandStats().call()
