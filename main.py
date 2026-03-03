@@ -1426,3 +1426,71 @@ def main() -> None:
     p_slots = sub.add_parser("slots", help="Paginated list of slots")
     p_slots.add_argument("--offset", type=int, default=0)
     p_slots.add_argument("--limit", type=int, default=20)
+    p_slots.set_defaults(func=lambda w3, c, a: cmd_slots(w3, c, a))
+
+    p_dash = sub.add_parser("dashboard", help="Dashboard-style box summary")
+    p_dash.set_defaults(func=lambda w3, c, a: cmd_dashboard(w3, c, a))
+
+    p_csv = sub.add_parser("export-csv", help="Export thermometers to CSV")
+    p_csv.add_argument("--output", "-o", default=None)
+    p_csv.set_defaults(func=lambda w3, c, a: cmd_export_csv(w3, c, a))
+
+    p_alerts = sub.add_parser("alerts", help="Hot/critical and halted symbols")
+    p_alerts.set_defaults(func=lambda w3, c, a: cmd_alerts(w3, c, a))
+
+    p_price_at = sub.add_parser("price-at", help="Price at or before block")
+    p_price_at.add_argument("symbol", nargs="?", default=None)
+    p_price_at.add_argument("block", nargs="?", default=None)
+    p_price_at.set_defaults(func=lambda w3, c, a: cmd_price_at(w3, c, a))
+
+    p_compare = sub.add_parser("compare", help="Price change bps between two blocks")
+    p_compare.add_argument("symbol", nargs="?", default=None)
+    p_compare.add_argument("--from-block", type=int)
+    p_compare.add_argument("--to-block", type=int)
+    p_compare.set_defaults(func=lambda w3, c, a: cmd_compare(w3, c, a))
+
+    p_report_float = sub.add_parser("report-float", help="Report price using float (e.g. 45000.5)")
+    p_report_float.add_argument("symbol", nargs="?", default=None)
+    p_report_float.add_argument("price_float", nargs="?", default=None)
+    p_report_float.add_argument("--wait", action="store_true")
+    p_report_float.set_defaults(func=lambda w3, c, a: cmd_report_float(w3, c, a))
+
+    p_info = sub.add_parser("info", help="App and contract connection info")
+    p_info.set_defaults(func=lambda w3, c, a: cmd_info(w3, c, a))
+
+    p_risk = sub.add_parser("risk-score", help="Aggregate risk score 0–100 from bands")
+    p_risk.set_defaults(func=lambda w3, c, a: cmd_risk_score(w3, c, a))
+
+    p_snap_save = sub.add_parser("snapshot-save", help="Save heat summary to named snapshot file")
+    p_snap_save.add_argument("name", nargs="?", default="default")
+    p_snap_save.set_defaults(func=lambda w3, c, a: cmd_snapshot_save(w3, c, a))
+
+    p_snap_load = sub.add_parser("snapshot-load", help="Load and print a saved snapshot (no RPC)")
+    p_snap_load.add_argument("name", nargs="?", default="default")
+    p_snap_load.set_defaults(func=None)
+
+    p_vol_rank = sub.add_parser("volatility-rank", help="Symbols sorted by volatility with rank")
+    p_vol_rank.set_defaults(func=lambda w3, c, a: cmd_volatility_rank(w3, c, a))
+
+    p_band_tl = sub.add_parser("band-timeline", help="Band history as compact timeline (C/m/w/h)")
+    p_band_tl.add_argument("symbol", nargs="?", default=None)
+    p_band_tl.add_argument("--limit", type=int, default=40)
+    p_band_tl.set_defaults(func=lambda w3, c, a: cmd_band_timeline(w3, c, a))
+
+    p_health = sub.add_parser("health", help="One-shot contract and config health check")
+    p_health.set_defaults(func=lambda w3, c, a: cmd_health(w3, c, a))
+
+    p_report_file = sub.add_parser("report-from-file", help="Batch report from JSON file")
+    p_report_file.add_argument("file", nargs="?", default=None)
+    p_report_file.add_argument("--wait", action="store_true")
+    p_report_file.set_defaults(func=lambda w3, c, a: cmd_report_from_file(w3, c, a))
+
+    p_simulate = sub.add_parser("simulate", help="Offline: band from comma-separated prices E8")
+    p_simulate.add_argument("prices", nargs="?", default=None)
+    p_simulate.add_argument("--cold-bps", type=int, default=500)
+    p_simulate.add_argument("--mild-bps", type=int, default=1500)
+    p_simulate.add_argument("--warm-bps", type=int, default=3500)
+    p_simulate.add_argument("--hot-bps", type=int, default=7000)
+    p_simulate.set_defaults(func=None)
+
+    p_diff = sub.add_parser("diff-exports", help="Compare two export/snapshot JSON files")
