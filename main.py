@@ -950,3 +950,71 @@ def cmd_alerts(w3, contract, args) -> None:
     for h in hashes:
         try:
             band = contract.functions.getCurrentBand(h).call()
+            is_halt = contract.functions.isHalted(h).call()
+        except Exception:
+            continue
+        if band >= BAND_HOT:
+            hex_h = hash_to_hex(h) if hasattr(h, "hex") else str(h)
+            hot_or_critical.append((symbol_map.get(hex_h, hex_h[:16] + ".."), band_name(band)))
+        if is_halt:
+            hex_h = hash_to_hex(h) if hasattr(h, "hex") else str(h)
+            halted_list.append(symbol_map.get(hex_h, hex_h[:16] + ".."))
+    print("\n  Alerts")
+    print("  " + "-" * 40)
+    print(f"  Platform paused: {paused}")
+    print(f"  Hot or critical: {len(hot_or_critical)}")
+    for label, b in hot_or_critical:
+        print(f"    - {label}  ({b})")
+    print(f"  Halted symbols: {len(halted_list)}")
+    for label in halted_list:
+        print(f"    - {label}")
+    print("  " + "-" * 40 + "\n")
+
+
+# -----------------------------------------------------------------------------
+# Commands: price-at
+# -----------------------------------------------------------------------------
+def cmd_price_at(w3, contract, args) -> None:
+    sym = getattr(args, "symbol", None) or (args.symbol if hasattr(args, "symbol") else None)
+    block_num = getattr(args, "block", None)
+    if not sym or block_num is None:
+        print("Provide symbol and block (positional or --block)", file=sys.stderr)
+        sys.exit(1)
+    try:
+        block_num = int(block_num)
+        h = contract.functions.symbolHashFromString(sym).call()
+        price_e8, found = contract.functions.getPriceAtBlock(h, block_num).call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    if not found:
+        print(f"No price for {sym} at or before block {block_num}.")
+        return
+    print(f"\n  {sym} at block {block_num}: price_e8={price_e8} ({fmt_price_e8(price_e8)})\n")
+
+
+# -----------------------------------------------------------------------------
+# Commands: compare
+# -----------------------------------------------------------------------------
+def cmd_compare(w3, contract, args) -> None:
+    sym = getattr(args, "symbol", None)
+    from_block = getattr(args, "from_block", None)
+    to_block = getattr(args, "to_block", None)
+    if not sym or from_block is None or to_block is None:
+        print("Provide symbol, --from-block, --to-block", file=sys.stderr)
+        sys.exit(1)
+    try:
+        from_block = int(from_block)
+        to_block = int(to_block)
+        h = contract.functions.symbolHashFromString(sym).call()
+        change_bps, from_found, to_found = contract.functions.getPriceChangeBps(h, from_block, to_block).call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    print(f"\n  {sym}  block {from_block} -> {to_block}")
+    print(f"  From found: {from_found}, To found: {to_found}")
+    print(f"  Change (bps): {change_bps}\n")
+
+
+# -----------------------------------------------------------------------------
+# Commands: report with float price
