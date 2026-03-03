@@ -1494,3 +1494,71 @@ def main() -> None:
     p_simulate.set_defaults(func=None)
 
     p_diff = sub.add_parser("diff-exports", help="Compare two export/snapshot JSON files")
+    p_diff.add_argument("file_a", nargs="?", default=None)
+    p_diff.add_argument("file_b", nargs="?", default=None)
+    p_diff.set_defaults(func=None)
+
+    p_presets = sub.add_parser("chain-presets", help="List chain preset names and RPC URLs")
+    p_presets.set_defaults(func=None)
+
+    p_set = sub.add_parser("set-config", help="Set local config key")
+    p_set.add_argument("key", nargs="?", default=None)
+    p_set.add_argument("value", nargs="?", default=None)
+    p_set.set_defaults(func=None)
+
+    p_add_label = sub.add_parser("add-symbol-label", help="Map hash to label in config")
+    p_add_label.add_argument("--hash", type=str)
+    p_add_label.add_argument("--label", type=str)
+    p_add_label.set_defaults(func=None)
+
+    args = parser.parse_args()
+
+    if args.command == "set-config":
+        args.key = getattr(args, "key", None) or (args.key if hasattr(args, "key") else None)
+        args.value = getattr(args, "value", None)
+        cmd_set_config(args)
+        return
+
+    if args.command == "add-symbol-label":
+        cmd_add_symbol_label(args)
+        return
+
+    if args.command == "snapshot-load":
+        cmd_snapshot_load(args)
+        return
+
+    if args.command == "simulate":
+        cmd_simulate(args)
+        return
+
+    if args.command == "diff-exports":
+        cmd_diff_exports(args)
+        return
+
+    if args.command == "chain-presets":
+        cmd_chain_presets(args)
+        return
+
+    if not args.command or not getattr(args, "func", None):
+        parser.print_help()
+        return
+
+    _ensure_contract_and_rpc(args)
+
+    try:
+        w3 = connect_web3()
+        contract = get_contract(w3)
+        args.func(w3, contract, args)
+    except ValueError as e:
+        print(f"Config error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except ConnectionError as e:
+        print(f"Connection error: {e}", file=sys.stderr)
+        sys.exit(1)
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+if __name__ == "__main__":
+    main()
