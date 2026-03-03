@@ -1086,3 +1086,71 @@ def cmd_risk_score(w3, contract, args) -> None:
 
 
 # -----------------------------------------------------------------------------
+# CocoaCEV: snapshot save/load — save or load heat summary to named file
+# -----------------------------------------------------------------------------
+def cmd_snapshot_save(w3, contract, args) -> None:
+    name = getattr(args, "name", None) or "default"
+    path = Path(get_config("snapshot_dir") or ".") / f"cocoa_cev_snapshot_{name}.json"
+    try:
+        hashes, bands, vols, prices = contract.functions.getHeatSummary().call()
+        seq = contract.functions.getGlobalReportSequence().call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    symbol_map = get_config("symbol_map") or {}
+    data = {
+        "saved_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+        "sequence": seq,
+        "thermometers": [],
+    }
+    for i, h in enumerate(hashes):
+        hex_h = hash_to_hex(h) if hasattr(h, "hex") else str(h)
+        data["thermometers"].append({
+            "symbol_hash_hex": hex_h,
+            "label": symbol_map.get(hex_h, hex_h),
+            "band": int(bands[i]) if i < len(bands) else 0,
+            "volatility_e8": int(vols[i]) if i < len(vols) else 0,
+            "price_e8": int(prices[i]) if i < len(prices) else 0,
+        })
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2)
+    print(f"Snapshot saved to {path}")
+
+
+def cmd_snapshot_load(args) -> None:
+    name = getattr(args, "name", None) or "default"
+    path = Path(get_config("snapshot_dir") or ".") / f"cocoa_cev_snapshot_{name}.json"
+    if not path.exists():
+        print(f"Snapshot not found: {path}", file=sys.stderr)
+        sys.exit(1)
+    with open(path, "r", encoding="utf-8") as f:
+        data = json.load(f)
+    print(f"\n  Snapshot: {name} (saved {data.get('saved_at', '?')}, seq={data.get('sequence', '?')})\n")
+    for t in data.get("thermometers", []):
+        label = t.get("label", t.get("symbol_hash_hex", "?")[:16])
+        band = t.get("band", 0)
+        print(f"    {label:22}  band={band_name(band):10}  vol={fmt_volatility_bps(t.get('volatility_e8', 0)):12}  price={fmt_price_e8(t.get('price_e8', 0))}")
+    print()
+
+
+# -----------------------------------------------------------------------------
+# CocoaCEV: volatility-rank — symbols sorted by volatility (desc) with rank
+# -----------------------------------------------------------------------------
+def cmd_volatility_rank(w3, contract, args) -> None:
+    try:
+        hashes = contract.functions.getRegisteredSymbols().call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    symbol_map = get_config("symbol_map") or {}
+    rows = []
+    for h in hashes:
+        try:
+            vol = contract.functions.getVolatilityE8(h).call()
+            band = contract.functions.getCurrentBand(h).call()
+            pr = contract.functions.getCurrentPriceE8(h).call()
+        except Exception:
+            continue
+        hex_h = hash_to_hex(h) if hasattr(h, "hex") else str(h)
+        rows.append((symbol_map.get(hex_h, hex_h[:16] + ".."), vol, band, pr))
