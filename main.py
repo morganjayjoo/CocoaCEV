@@ -1154,3 +1154,71 @@ def cmd_volatility_rank(w3, contract, args) -> None:
             continue
         hex_h = hash_to_hex(h) if hasattr(h, "hex") else str(h)
         rows.append((symbol_map.get(hex_h, hex_h[:16] + ".."), vol, band, pr))
+    rows.sort(key=lambda x: x[1], reverse=True)
+    print("\n  Volatility rank (highest first)\n")
+    for rank, (label, vol, band, pr) in enumerate(rows, 1):
+        print(f"    #{rank:2}  {label:22}  {fmt_volatility_bps(vol):12}  band={band_name(band):10}  {fmt_price_e8(pr)}")
+    print()
+
+
+# -----------------------------------------------------------------------------
+# CocoaCEV: band-timeline — band history as compact timeline string
+# -----------------------------------------------------------------------------
+def cmd_band_timeline(w3, contract, args) -> None:
+    sym = getattr(args, "symbol", None)
+    limit = getattr(args, "limit", None) or 40
+    if not sym:
+        print("Provide --symbol", file=sys.stderr)
+        sys.exit(1)
+    try:
+        h = contract.functions.symbolHashFromString(sym).call()
+        bands, blocks = contract.functions.getBandHistory(h, 0, limit).call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    if not bands:
+        print(f"No band history for {sym}.")
+        return
+    chars = "CmwhC"  # cold mild warm hot critical
+    timeline = "".join(chars[b] if b < 5 else "?" for b in reversed(bands))
+    print(f"\n  Band timeline for {sym} (oldest left, newest right; C=cold m=mild w=warm h=hot C=critical)\n")
+    print(f"  {timeline}\n")
+
+
+# -----------------------------------------------------------------------------
+# CocoaCEV: health — one-shot connectivity and contract health
+# -----------------------------------------------------------------------------
+def cmd_health(w3, contract, args) -> None:
+    ok = True
+    print("\n  Health check")
+    print("  " + "-" * 40)
+    try:
+        count = contract.functions.getSlotsCount().call()
+        paused = contract.functions.platformPaused().call()
+        seq = contract.functions.getGlobalReportSequence().call()
+    except Exception as e:
+        print(f"  Contract read: FAIL — {e}")
+        ok = False
+    else:
+        print(f"  Contract read: OK (thermometers={count}, paused={paused}, seq={seq})")
+    if not get_contract_address():
+        print("  Config: contract_address not set")
+        ok = False
+    else:
+        print("  Config: contract_address set")
+    print("  " + "-" * 40)
+    print("  Overall:", "OK" if ok else "FAIL")
+    print()
+
+
+# -----------------------------------------------------------------------------
+# CocoaCEV: report-from-file — batch report from JSON file
+# -----------------------------------------------------------------------------
+def cmd_report_from_file(w3, contract, args) -> None:
+    path = getattr(args, "file", None)
+    if not path or not Path(path).exists():
+        print("Provide --file (path to JSON: [{\"symbol\": \"BTC\", \"price_e8\": 4500000000000}, ...])", file=sys.stderr)
+        sys.exit(1)
+    with open(path, "r", encoding="utf-8") as f:
+        items = json.load(f)
+    if not isinstance(items, list):
