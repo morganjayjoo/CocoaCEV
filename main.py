@@ -1358,3 +1358,71 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", help="Commands")
 
     p_summary = sub.add_parser("summary", help="Show heat summary for all thermometers")
+    p_summary.set_defaults(func=lambda w3, c, a: cmd_summary(w3, c, a))
+
+    p_band_stats = sub.add_parser("band-stats", help="Show band distribution")
+    p_band_stats.set_defaults(func=lambda w3, c, a: cmd_band_stats(w3, c, a))
+
+    p_symbol = sub.add_parser("symbol", help="Show details for one symbol")
+    p_symbol.add_argument("symbol", nargs="?", default=None)
+    p_symbol.set_defaults(func=lambda w3, c, a: cmd_symbol(w3, c, a))
+
+    p_list = sub.add_parser("list", help="List registered symbol hashes")
+    p_list.set_defaults(func=lambda w3, c, a: cmd_list(w3, c, a))
+
+    p_thresholds = sub.add_parser("thresholds", help="Show volatility band thresholds")
+    p_thresholds.set_defaults(func=lambda w3, c, a: cmd_thresholds(w3, c, a))
+
+    p_config_snap = sub.add_parser("config", help="Show contract config snapshot")
+    p_config_snap.set_defaults(func=lambda w3, c, a: cmd_config_snapshot(w3, c, a))
+
+    p_report = sub.add_parser("report", help="Report price (updater; requires private key)")
+    p_report.add_argument("symbol", nargs="?", default=None)
+    p_report.add_argument("price", nargs="?", default=None, help="Price in E8")
+    p_report.add_argument("--wait", action="store_true", help="Wait for tx receipt")
+    p_report.set_defaults(func=lambda w3, c, a: cmd_report(w3, c, a))
+
+    p_batch = sub.add_parser("batch-report", help="Batch report prices")
+    p_batch.add_argument("--symbols", type=str, help="Comma-separated symbols")
+    p_batch.add_argument("--prices", type=str, help="Comma-separated E8 prices")
+    p_batch.add_argument("--wait", action="store_true")
+    p_batch.set_defaults(func=lambda w3, c, a: cmd_batch_report(w3, c, a))
+
+    p_history = sub.add_parser("history", help="Show price history for symbol")
+    p_history.add_argument("symbol", nargs="?", default=None)
+    p_history.add_argument("--limit", type=int, default=24)
+    p_history.set_defaults(func=lambda w3, c, a: cmd_history(w3, c, a))
+
+    p_band_hist = sub.add_parser("band-history", help="Show band history for symbol")
+    p_band_hist.add_argument("symbol", nargs="?", default=None)
+    p_band_hist.add_argument("--limit", type=int, default=20)
+    p_band_hist.set_defaults(func=lambda w3, c, a: cmd_band_history(w3, c, a))
+
+    p_hottest = sub.add_parser("hottest", help="Show hottest symbol")
+    p_hottest.set_defaults(func=lambda w3, c, a: cmd_hottest(w3, c, a))
+
+    p_coldest = sub.add_parser("coldest", help="Show coldest symbol")
+    p_coldest.set_defaults(func=lambda w3, c, a: cmd_coldest(w3, c, a))
+
+    p_watch = sub.add_parser("watch", help="Watch heat summary (refresh loop)")
+    p_watch.add_argument("--interval", type=int, default=12)
+    p_watch.set_defaults(func=lambda w3, c, a: cmd_watch(w3, c, a))
+
+    p_export = sub.add_parser("export", help="Export summary to JSON")
+    p_export.add_argument("--output", "-o", default=None)
+    p_export.set_defaults(func=lambda w3, c, a: cmd_export(w3, c, a))
+
+    p_status = sub.add_parser("status", help="Contract status (balance, paused, sequence)")
+    p_status.set_defaults(func=lambda w3, c, a: cmd_status(w3, c, a))
+
+    p_can = sub.add_parser("can-report", help="Check if symbol can be reported")
+    p_can.add_argument("symbol", nargs="?", default=None)
+    p_can.set_defaults(func=lambda w3, c, a: cmd_can_report(w3, c, a))
+
+    p_thermo = sub.add_parser("thermometer", help="Full thermometer details for symbol")
+    p_thermo.add_argument("symbol", nargs="?", default=None)
+    p_thermo.set_defaults(func=lambda w3, c, a: cmd_thermometer(w3, c, a))
+
+    p_slots = sub.add_parser("slots", help="Paginated list of slots")
+    p_slots.add_argument("--offset", type=int, default=0)
+    p_slots.add_argument("--limit", type=int, default=20)
