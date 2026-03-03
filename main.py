@@ -1290,3 +1290,71 @@ def cmd_simulate(args) -> None:
     band = _band_from_bps(vol_bps, cold, mild, warm, hot)
     print(f"\n  Simulate (offline)")
     print(f"  Volatility (bps): {vol_bps}")
+    print(f"  Band: {band} ({band_name(band)})")
+    print(f"  Thresholds: cold<={cold}, mild<={mild}, warm<={warm}, hot<={hot}\n")
+
+
+# -----------------------------------------------------------------------------
+# CocoaCEV: diff-exports — compare two export JSON files
+# -----------------------------------------------------------------------------
+def cmd_diff_exports(args) -> None:
+    a_path = getattr(args, "file_a", None)
+    b_path = getattr(args, "file_b", None)
+    if not a_path or not b_path:
+        print("Provide --file-a and --file-b (cocoa_cev_export.json or snapshot)", file=sys.stderr)
+        sys.exit(1)
+    for p in (a_path, b_path):
+        if not Path(p).exists():
+            print(f"File not found: {p}", file=sys.stderr)
+            sys.exit(1)
+    with open(a_path, "r", encoding="utf-8") as f:
+        a = json.load(f)
+    with open(b_path, "r", encoding="utf-8") as f:
+        b = json.load(f)
+    therm_a = {t.get("symbol_hash_hex") or t.get("label", ""): t for t in a.get("thermometers", [])}
+    therm_b = {t.get("symbol_hash_hex") or t.get("label", ""): t for t in b.get("thermometers", [])}
+    all_keys = set(therm_a) | set(therm_b)
+    print("\n  Diff (A vs B)")
+    print("  " + "-" * 60)
+    for k in sorted(all_keys):
+        ta, tb = therm_a.get(k), therm_b.get(k)
+        label = (ta or tb).get("label", k[:16])
+        band_a = ta.get("current_band", ta.get("band")) if ta else None
+        band_b = tb.get("current_band", tb.get("band")) if tb else None
+        if band_a != band_b:
+            print(f"    {label:24}  band: {band_a} -> {band_b}")
+    print("  " + "-" * 60 + "\n")
+
+
+# -----------------------------------------------------------------------------
+# CocoaCEV: chain-presets — list available chain preset names and URLs
+# -----------------------------------------------------------------------------
+def cmd_chain_presets(args) -> None:
+    print("\n  Chain presets (set rpc_url or COCOACEV_RPC to preset name)")
+    print("  " + "-" * 50)
+    for name, url in CHAIN_PRESETS.items():
+        print(f"    {name:12}  {url}")
+    print("  " + "-" * 50 + "\n")
+
+
+def _ensure_contract_and_rpc(args) -> None:
+    """Apply --rpc and --contract from args to config so later get_rpc/get_contract_address use them."""
+    if getattr(args, "rpc", None):
+        set_config("rpc_url", args.rpc)
+    if getattr(args, "contract", None):
+        set_config("contract_address", args.contract)
+
+
+# -----------------------------------------------------------------------------
+# Main
+# -----------------------------------------------------------------------------
+def main() -> None:
+    from web3 import Web3
+
+    parser = argparse.ArgumentParser(prog=APP_NAME, description="CocoaCEV — Therminos temperature checker CLI")
+    parser.add_argument("--version", action="version", version=f"{APP_NAME} {VERSION}")
+    parser.add_argument("--rpc", default=None, help="RPC URL (overrides config)")
+    parser.add_argument("--contract", default=None, help="Therminos contract address (overrides config)")
+    sub = parser.add_subparsers(dest="command", help="Commands")
+
+    p_summary = sub.add_parser("summary", help="Show heat summary for all thermometers")
