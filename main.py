@@ -1222,3 +1222,71 @@ def cmd_report_from_file(w3, contract, args) -> None:
     with open(path, "r", encoding="utf-8") as f:
         items = json.load(f)
     if not isinstance(items, list):
+        items = [items]
+    symbols = []
+    prices_e8 = []
+    for item in items:
+        sym = item.get("symbol") or item.get("symbol_hash")
+        pe = item.get("price_e8") or item.get("priceE8")
+        if sym is None or pe is None:
+            continue
+        if isinstance(pe, float):
+            pe = int(round(pe * E8)) if pe >= 1 else int(pe)
+        symbols.append(sym)
+        prices_e8.append(int(pe))
+    if not symbols:
+        print("No valid symbol/price_e8 entries in file.", file=sys.stderr)
+        sys.exit(1)
+    args.symbols = ",".join(symbols)
+    args.prices = ",".join(map(str, prices_e8))
+    args.wait = getattr(args, "wait", False)
+    cmd_batch_report(w3, contract, args)
+
+
+# -----------------------------------------------------------------------------
+# CocoaCEV: simulate — offline band from list of prices and thresholds (bps)
+# -----------------------------------------------------------------------------
+def _volatility_bps_from_prices(prices_e8: list[int]) -> int:
+    if len(prices_e8) < 2:
+        return 0
+    changes = []
+    for i in range(1, len(prices_e8)):
+        p0, p1 = prices_e8[i - 1], prices_e8[i]
+        if p0 == 0:
+            continue
+        ch = abs(int(p1) - int(p0)) * BPS_BASE // p0
+        changes.append(ch)
+    return sum(changes) // len(changes) if changes else 0
+
+
+def _band_from_bps(vol_bps: int, cold: int, mild: int, warm: int, hot: int) -> int:
+    if vol_bps <= cold:
+        return BAND_COLD
+    if vol_bps <= mild:
+        return BAND_MILD
+    if vol_bps <= warm:
+        return BAND_WARM
+    if vol_bps <= hot:
+        return BAND_HOT
+    return BAND_CRITICAL
+
+
+def cmd_simulate(args) -> None:
+    """Offline: compute band from comma-separated prices (E8) and optional threshold bps."""
+    prices_str = getattr(args, "prices", None)
+    if not prices_str:
+        print("Provide --prices (comma-separated E8 values, e.g. 100000000,102000000,99000000)", file=sys.stderr)
+        sys.exit(1)
+    try:
+        prices_e8 = [int(x.strip()) for x in prices_str.split(",")]
+    except ValueError:
+        print("--prices must be comma-separated integers.", file=sys.stderr)
+        sys.exit(1)
+    cold = int(getattr(args, "cold_bps", None) or 500)
+    mild = int(getattr(args, "mild_bps", None) or 1500)
+    warm = int(getattr(args, "warm_bps", None) or 3500)
+    hot = int(getattr(args, "hot_bps", None) or 7000)
+    vol_bps = _volatility_bps_from_prices(prices_e8)
+    band = _band_from_bps(vol_bps, cold, mild, warm, hot)
+    print(f"\n  Simulate (offline)")
+    print(f"  Volatility (bps): {vol_bps}")
