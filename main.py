@@ -1018,3 +1018,71 @@ def cmd_compare(w3, contract, args) -> None:
 
 # -----------------------------------------------------------------------------
 # Commands: report with float price
+# -----------------------------------------------------------------------------
+def cmd_report_float(w3, contract, args) -> None:
+    sym = args.symbol
+    price_float = args.price_float
+    if not sym or price_float is None:
+        print("Provide --symbol and --price-float (e.g. 45000.5)", file=sys.stderr)
+        sys.exit(1)
+    try:
+        price_e8 = price_float_to_e8(float(price_float))
+    except (ValueError, TypeError):
+        print("--price-float must be a number.", file=sys.stderr)
+        sys.exit(1)
+    args.price = str(price_e8)
+    cmd_report(w3, contract, args)
+
+
+# -----------------------------------------------------------------------------
+# Commands: info
+# -----------------------------------------------------------------------------
+def cmd_info(w3, contract, args) -> None:
+    """Print app and contract connection info."""
+    rpc = get_rpc()
+    addr = get_contract_address()
+    try:
+        genesis = contract.functions.getGenesisHash().call()
+        deploy_block = contract.functions.getDeployBlock().call()
+        chain_id = w3.eth.chain_id
+    except Exception:
+        genesis = deploy_block = chain_id = None
+    print(f"\n  {APP_NAME} {VERSION}")
+    print("  " + "-" * 40)
+    print(f"  RPC:          {rpc[:50]}..." if len(rpc) > 50 else f"  RPC:          {rpc}")
+    print(f"  Contract:     {addr or '(not set)'}")
+    if chain_id is not None:
+        print(f"  Chain ID:     {chain_id}")
+    if deploy_block is not None:
+        print(f"  Deploy block: {deploy_block}")
+    if genesis is not None:
+        hex_genesis = genesis.hex() if hasattr(genesis, "hex") else str(genesis)
+        print(f"  Genesis hash: {hex_genesis[:24]}...")
+    print("  " + "-" * 40 + "\n")
+
+
+# -----------------------------------------------------------------------------
+# CocoaCEV: risk-score — aggregate risk score (0–100) from band distribution
+# -----------------------------------------------------------------------------
+def cmd_risk_score(w3, contract, args) -> None:
+    """Compute a single risk score 0–100 from current bands (critical=100, hot=75, warm=50, mild=25, cold=0)."""
+    try:
+        hashes, bands, vols, prices = contract.functions.getHeatSummary().call()
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
+    if not bands:
+        print("  Risk score: N/A (no thermometers)\n")
+        return
+    weights = (0, 25, 50, 75, 100)  # cold, mild, warm, hot, critical
+    total = sum(weights[b] if b < 5 else 100 for b in bands)
+    score = total // len(bands)
+    hot_count = sum(1 for b in bands if b >= BAND_HOT)
+    print("\n  Risk score (0–100)")
+    print("  " + "-" * 40)
+    print(f"  Aggregate score: {score}")
+    print(f"  Thermometers in hot/critical: {hot_count} / {len(bands)}")
+    print("  " + "-" * 40 + "\n")
+
+
+# -----------------------------------------------------------------------------
